@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	// ここらへんはmodelsとかになるはず
+	// 仮）ここらへんはmodelsとかになるはず
 	"github.com/go_rest_sample/countries"
 	"github.com/go_rest_sample/users"
 )
