@@ -1,21 +1,34 @@
 package main
 
 import (
+	"fmt"
 	"github.com/ant0ine/go-json-rest/rest"
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/jinzhu/gorm"
+
 	"log"
 	"net/http"
-	"sync"
+
+	"github.com/go_rest_sample/countries"
 )
 
 func main() {
+	// db（仮）
+	db := gormConnect()
+	defer db.Close()
+
+	var allUsers []User
+	db.Find(&allUsers)
+	fmt.Println(allUsers)
+
 	api := rest.NewApi()
 	api.Use(rest.DefaultDevStack...)
 
 	router, err := rest.MakeRouter(
-		rest.Get("/countries", GetAllCountries),
-		rest.Get("/countries/:code", GetCountry),
-		rest.Post("/countries", PostCountry),
-		rest.Delete("/countries/:code", DeleteCountry),
+		rest.Get("/countries", countries.GetAllCountries),
+		rest.Get("/countries/:code", countries.GetCountry),
+		rest.Post("/countries", countries.PostCountry),
+		rest.Delete("/countries/:code", countries.DeleteCountry),
 	)
 
 	if err != nil {
@@ -30,75 +43,27 @@ func main() {
 	//log.Fatal(http.ListenAndServe("127.0.0.1:8080", api.MakeHandler()))
 }
 
-type Country struct {
-	Code string
-	Name string
+type User struct {
+	ID       int64 `gorm:"primary_key"`
+	Username string
 }
 
-// メモリストアとロック
-var store = map[string]*Country{}
-var lock = sync.RWMutex{}
+//func (u *User) TableName() string {
+//	return "auth_user"
+//}
 
-// index
-func GetAllCountries(w rest.ResponseWriter, r *rest.Request) {
-	lock.RLock()
+func gormConnect() *gorm.DB {
+	DBMS := "mysql"
+	USER := "root"
+	PASS := ""
+	PROTOCOL := "tcp(127.0.0.1:3306)"
+	DBNAME := "go_rest_sample_development"
 
-	countries := make([]Country, len(store)) // 固定長配列の作成
-	i := 0
-	for _, country := range store {
-		countries[i] = *country
-		i++
-	}
+	CONNECT := USER + ":" + PASS + "@" + PROTOCOL + "/" + DBNAME
+	db, err := gorm.Open(DBMS, CONNECT)
 
-	lock.RUnlock()
-	w.WriteJson(&countries)
-}
-
-//show
-func GetCountry(w rest.ResponseWriter, r *rest.Request) {
-	code := r.PathParam("code")
-
-	lock.RLock()
-	var country *Country // 初期化
-	if store[code] != nil {
-		country = &Country{}
-		*country = *store[code]
-	}
-	lock.RUnlock()
-
-	if country == nil {
-		rest.NotFound(w, r)
-		return
-	}
-
-	w.WriteJson(country)
-}
-
-// create
-func PostCountry(w rest.ResponseWriter, r *rest.Request) {
-	country := Country{}
-	err := r.DecodeJsonPayload(&country) // requestからbodyのjsonデータをデコードしてstructに割り当て
 	if err != nil {
-		rest.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		panic(err.Error()) // deferのみ処理して、強制終了
 	}
-	if country.Code == "" {
-		rest.Error(w, "country code required", 400)
-	}
-	if country.Name == "" {
-		rest.Error(w, "country name required", 400)
-		return
-	}
-	lock.Lock()
-	store[country.Code] = &country
-	lock.Unlock()
-	w.WriteJson(&country)
-}
-
-func DeleteCountry(w rest.ResponseWriter, r *rest.Request) {
-	code := r.PathParam("code")
-	lock.Lock()
-	delete(store, code)
-	lock.Unlock()
-	w.WriteHeader(http.StatusOK)
+	return db
 }
